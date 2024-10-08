@@ -191,8 +191,11 @@ def main():
     if credentials:
         service = get_gsc_service(credentials)
         if service:
-            website_url = st.text_input("Enter the website URL (e.g., https://example.com):")
+            # Use session state to avoid rerun issues
+            if 'df' not in st.session_state:
+                st.session_state.df = None
 
+            website_url = st.text_input("Enter the website URL (e.g., https://example.com):")
             start_date = st.date_input("Start Date")
             end_date = st.date_input("End Date")
 
@@ -201,11 +204,14 @@ def main():
                 dimensionFilterGroups = []
                 df = fetch_search_console_data(service, website_url, start_date.strftime("%Y-%m-%d"),
                                                end_date.strftime("%Y-%m-%d"), dimensions, dimensionFilterGroups)
+                st.session_state.df = df
                 st.write(df)
 
+            # Check if data was fetched successfully before moving on
+            if st.session_state.df is not None:
                 pattern = st.text_input("Enter URL pattern (e.g., /products/):")
                 if pattern:
-                    matching_urls = df[df['page'].str.contains(pattern, na=False)]
+                    matching_urls = st.session_state.df[st.session_state.df['page'].str.contains(pattern, na=False)]
                     st.write("Matching URLs:", matching_urls)
 
                     for url in matching_urls['page'].unique():
@@ -214,7 +220,7 @@ def main():
                         st.write("Title:", title)
                         st.write("Meta Description:", meta_description)
 
-                        find_gaps_terms = identify_gaps(df, url)
+                        find_gaps_terms = identify_gaps(st.session_state.df, url)
                         st.write("Keywords missing in title/meta description:", find_gaps_terms)
 
                         suggestions = generate_suggestions_for_title_meta(title, meta_description, find_gaps_terms)
