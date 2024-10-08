@@ -24,11 +24,9 @@ SCOPES = ['https://www.googleapis.com/auth/webmasters.readonly']
 def authenticate_user():
     """Authenticate the user using Google OAuth 2.0 and handle token refresh."""
     credentials = load_credentials()
-    # Check if the credentials are expired and if a refresh token is available
     if credentials and credentials.expired and credentials.refresh_token:
         try:
             credentials.refresh(Request())
-            # Save the refreshed token
             with open('token.pkl', 'wb') as token_file:
                 pickle.dump(credentials, token_file)
             st.success("Token refreshed successfully!")
@@ -37,7 +35,6 @@ def authenticate_user():
             st.error(f"Error refreshing token: {str(e)}")
             credentials = None
 
-    # If no valid credentials, initiate the authentication process
     if not credentials:
         flow = Flow.from_client_secrets_file(
             CLIENT_SECRETS_FILE, scopes=SCOPES,
@@ -52,7 +49,6 @@ def authenticate_user():
             try:
                 flow.fetch_token(code=code)
                 credentials = flow.credentials
-                # Save the new credentials for future use
                 with open('token.pkl', 'wb') as token_file:
                     pickle.dump(credentials, token_file)
                 st.success("Authentication successful!")
@@ -79,15 +75,6 @@ def get_gsc_service(credentials):
         st.error(f"Error connecting to the GSC service: {str(error)}")
         return None
 
-def get_site_list(service):
-    """Fetch and return the list of sites from GSC."""
-    try:
-        site_list = service.sites().list().execute()
-        return [site['siteUrl'] for site in site_list.get('siteEntry', [])]
-    except HttpError as error:
-        st.error(f"Error fetching site list: {str(error)}")
-        return []
-
 def fetch_search_console_data(service, website_url, start_date, end_date, dimensions, dimensionFilterGroups):
     """Fetch GSC data for the specified website and time range."""
     all_responses = []
@@ -106,14 +93,12 @@ def fetch_search_console_data(service, website_url, start_date, end_date, dimens
 
         try:
             response_data = service.searchanalytics().query(siteUrl=website_url, body=request_body).execute()
-            # Check if 'rows' exists to prevent KeyError
             if 'rows' in response_data:
                 for row in response_data['rows']:
                     temp = row['keys'] + [row['clicks'], row['impressions'], row['ctr'], row['position']]
                     all_responses.append(temp)
 
                 start_row += len(response_data['rows'])
-                # Stop if fewer rows than the limit were returned
                 if len(response_data['rows']) < 25000:
                     break
             else:
@@ -123,7 +108,6 @@ def fetch_search_console_data(service, website_url, start_date, end_date, dimens
             st.error(f"Error fetching data: {str(error)}")
             break
 
-    # Return DataFrame, even if empty
     df = pd.DataFrame(all_responses, columns=dimensions + ['clicks', 'impressions', 'ctr', 'position'])
     return df
 
@@ -181,7 +165,7 @@ def generate_suggestions_for_title_meta(title, meta_description, find_gaps_terms
 
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4",  # or "gpt-3.5-turbo"
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": input_prompt}
@@ -207,12 +191,7 @@ def main():
     if credentials:
         service = get_gsc_service(credentials)
         if service:
-            # Store the selected site in session state to prevent refreshing issues
-            if 'selected_site' not in st.session_state:
-                st.session_state.selected_site = None
-
-            sites = get_site_list(service)
-            selected_site = st.selectbox("Select a site to analyze:", sites, key='selected_site')
+            website_url = st.text_input("Enter the website URL (e.g., https://example.com):")
 
             start_date = st.date_input("Start Date")
             end_date = st.date_input("End Date")
@@ -220,20 +199,24 @@ def main():
             if st.button("Fetch Data"):
                 dimensions = ['date', 'page', 'query']
                 dimensionFilterGroups = []
-                df = fetch_search_console_data(service, selected_site, start_date.strftime("%Y-%m-%d"),
+                df = fetch_search_console_data(service, website_url, start_date.strftime("%Y-%m-%d"),
                                                end_date.strftime("%Y-%m-%d"), dimensions, dimensionFilterGroups)
                 st.write(df)
 
-                selected_url = st.text_input("Enter URL to analyze:")
-                if selected_url:
-                    title, meta_description = scrape_title_meta_description(selected_url)
-                    st.write("Title:", title)
-                    st.write("Meta Description:", meta_description)
+                pattern = st.text_input("Enter URL pattern (e.g., /products/):")
+                if pattern:
+                    matching_urls = df[df['page'].str.contains(pattern, na=False)]
+                    st.write("Matching URLs:", matching_urls)
 
-                    find_gaps_terms = identify_gaps(df, selected_url)
-                    st.write("Keywords missing in title/meta description:", find_gaps_terms)
+                    for url in matching_urls['page'].unique():
+                        title, meta_description = scrape_title_meta_description(url)
+                        st.write(f"URL: {url}")
+                        st.write("Title:", title)
+                        st.write("Meta Description:", meta_description)
 
-                    if st.button("Generate AI Suggestions"):
+                        find_gaps_terms = identify_gaps(df, url)
+                        st.write("Keywords missing in title/meta description:", find_gaps_terms)
+
                         suggestions = generate_suggestions_for_title_meta(title, meta_description, find_gaps_terms)
                         if suggestions:
                             st.write("AI-generated Suggestions:")
