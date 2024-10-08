@@ -165,13 +165,13 @@ def generate_suggestions_for_title_meta(title, meta_description, find_gaps_terms
 
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4",
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": input_prompt}
             ]
         )
-        suggestions = response.choices[0].message['content']
+        suggestions = response['choices'][0]['message']['content']
         return suggestions
     except Exception as e:
         st.error(f"Error with OpenAI API: {str(e)}")
