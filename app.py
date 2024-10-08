@@ -21,8 +21,11 @@ from nltk.corpus import stopwords
 CLIENT_SECRETS_FILE = "client_secrets.json"
 SCOPES = ['https://www.googleapis.com/auth/webmasters.readonly']
 
-# Set your OpenAI API key
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# Access the OpenAI API key from Streamlit secrets
+try:
+    openai.api_key = st.secrets["OPENAI_API_KEY"]
+except KeyError:
+    st.error("The OpenAI API key was not found. Please set the 'OPENAI_API_KEY' in the Streamlit secrets.")
 
 def authenticate_user():
     """Authenticate the user using Google OAuth 2.0 and handle token refresh."""
