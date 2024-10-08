@@ -13,15 +13,15 @@ import requests
 from bs4 import BeautifulSoup
 import openai
 
-# Download NLTK resources
+# Download NLTK resources needed for the script
 nltk.download('stopwords')
 from nltk.corpus import stopwords
 
-# OAuth 2.0 Client Secrets file and API scopes
+# Define the OAuth 2.0 client secrets file and required scopes
 CLIENT_SECRETS_FILE = "client_secrets.json"
 SCOPES = ['https://www.googleapis.com/auth/webmasters.readonly']
 
-# Access the OpenAI API key from Streamlit secrets
+# Access the OpenAI API key securely from Streamlit secrets
 try:
     openai.api_key = st.secrets["OPENAI_API_KEY"]
 except KeyError:
@@ -30,9 +30,11 @@ except KeyError:
 def authenticate_user():
     """Authenticate the user using Google OAuth 2.0 and handle token refresh."""
     credentials = load_credentials()
+    # Check if the credentials are expired and if a refresh token is available
     if credentials and credentials.expired and credentials.refresh_token:
         try:
             credentials.refresh(Request())
+            # Save the refreshed token
             with open('token.pkl', 'wb') as token_file:
                 pickle.dump(credentials, token_file)
             st.success("Token refreshed successfully!")
@@ -41,6 +43,7 @@ def authenticate_user():
             st.error(f"Error refreshing token: {str(e)}")
             credentials = None
 
+    # If no valid credentials, initiate the authentication process
     if not credentials:
         flow = Flow.from_client_secrets_file(
             CLIENT_SECRETS_FILE, scopes=SCOPES,
@@ -55,6 +58,7 @@ def authenticate_user():
             try:
                 flow.fetch_token(code=code)
                 credentials = flow.credentials
+                # Save the new credentials for future use
                 with open('token.pkl', 'wb') as token_file:
                     pickle.dump(credentials, token_file)
                 st.success("Authentication successful!")
@@ -73,7 +77,7 @@ def load_credentials():
     return None
 
 def get_gsc_service(credentials):
-    """Build the GSC service using the provided credentials."""
+    """Build the Google Search Console (GSC) service using the provided credentials."""
     try:
         service = build('searchconsole', 'v1', credentials=credentials)
         return service
@@ -108,17 +112,24 @@ def fetch_search_console_data(service, website_url, start_date, end_date, dimens
 
         try:
             response_data = service.searchanalytics().query(siteUrl=website_url, body=request_body).execute()
-            for row in response_data['rows']:
-                temp = row['keys'] + [row['clicks'], row['impressions'], row['ctr'], row['position']]
-                all_responses.append(temp)
+            # Check if 'rows' exists to prevent KeyError
+            if 'rows' in response_data:
+                for row in response_data['rows']:
+                    temp = row['keys'] + [row['clicks'], row['impressions'], row['ctr'], row['position']]
+                    all_responses.append(temp)
 
-            start_row += len(response_data['rows'])
-            if len(response_data['rows']) < 25000:
+                start_row += len(response_data['rows'])
+                # Stop if fewer rows than the limit were returned
+                if len(response_data['rows']) < 25000:
+                    break
+            else:
+                st.warning("No data available for the selected parameters.")
                 break
         except HttpError as error:
             st.error(f"Error fetching data: {str(error)}")
             break
 
+    # Return DataFrame, even if empty
     df = pd.DataFrame(all_responses, columns=dimensions + ['clicks', 'impressions', 'ctr', 'position'])
     return df
 
