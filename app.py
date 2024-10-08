@@ -21,12 +21,6 @@ from nltk.corpus import stopwords
 CLIENT_SECRETS_FILE = "client_secrets.json"
 SCOPES = ['https://www.googleapis.com/auth/webmasters.readonly']
 
-# Access the OpenAI API key securely from Streamlit secrets
-try:
-    openai.api_key = st.secrets["OPENAI_API_KEY"]
-except KeyError:
-    st.error("The OpenAI API key was not found. Please set the 'OPENAI_API_KEY' in the Streamlit secrets.")
-
 def authenticate_user():
     """Authenticate the user using Google OAuth 2.0 and handle token refresh."""
     credentials = load_credentials()
@@ -203,38 +197,47 @@ def main():
     """Main function to run the Streamlit app."""
     st.title("Google Search Console Data Analyzer with AI Suggestions")
 
+    # Allow the user to input their OpenAI API key directly in the app
+    openai_api_key = st.text_input("Enter your OpenAI API Key:", type="password")
+    if openai_api_key:
+        openai.api_key = openai_api_key
+
     credentials = authenticate_user()
 
     if credentials:
         service = get_gsc_service(credentials)
         if service:
+            # Store the selected site in session state to prevent refreshing issues
+            if 'selected_site' not in st.session_state:
+                st.session_state.selected_site = None
+
             sites = get_site_list(service)
-            if sites:
-                selected_site = st.selectbox("Select a site to analyze:", sites)
-                start_date = st.date_input("Start Date")
-                end_date = st.date_input("End Date")
+            selected_site = st.selectbox("Select a site to analyze:", sites, key='selected_site')
 
-                if st.button("Fetch Data"):
-                    dimensions = ['date', 'page', 'query']
-                    dimensionFilterGroups = []
-                    df = fetch_search_console_data(service, selected_site, start_date.strftime("%Y-%m-%d"),
-                                                   end_date.strftime("%Y-%m-%d"), dimensions, dimensionFilterGroups)
-                    st.write(df)
+            start_date = st.date_input("Start Date")
+            end_date = st.date_input("End Date")
 
-                    selected_url = st.text_input("Enter URL to analyze:")
-                    if selected_url:
-                        title, meta_description = scrape_title_meta_description(selected_url)
-                        st.write("Title:", title)
-                        st.write("Meta Description:", meta_description)
+            if st.button("Fetch Data"):
+                dimensions = ['date', 'page', 'query']
+                dimensionFilterGroups = []
+                df = fetch_search_console_data(service, selected_site, start_date.strftime("%Y-%m-%d"),
+                                               end_date.strftime("%Y-%m-%d"), dimensions, dimensionFilterGroups)
+                st.write(df)
 
-                        find_gaps_terms = identify_gaps(df, selected_url)
-                        st.write("Keywords missing in title/meta description:", find_gaps_terms)
+                selected_url = st.text_input("Enter URL to analyze:")
+                if selected_url:
+                    title, meta_description = scrape_title_meta_description(selected_url)
+                    st.write("Title:", title)
+                    st.write("Meta Description:", meta_description)
 
-                        if st.button("Generate AI Suggestions"):
-                            suggestions = generate_suggestions_for_title_meta(title, meta_description, find_gaps_terms)
-                            if suggestions:
-                                st.write("AI-generated Suggestions:")
-                                st.write(suggestions)
+                    find_gaps_terms = identify_gaps(df, selected_url)
+                    st.write("Keywords missing in title/meta description:", find_gaps_terms)
+
+                    if st.button("Generate AI Suggestions"):
+                        suggestions = generate_suggestions_for_title_meta(title, meta_description, find_gaps_terms)
+                        if suggestions:
+                            st.write("AI-generated Suggestions:")
+                            st.write(suggestions)
 
 if __name__ == "__main__":
     main()
