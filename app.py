@@ -192,7 +192,7 @@ def generate_suggestions_for_title_meta(title: str, meta_description: str, find_
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": input_prompt}
             ],
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             temperature=0.7,
             max_tokens=500
         )
