@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup
 from openai import OpenAI
 from typing import List, Dict, Any, Optional
 import logging
+import openai migrate
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
