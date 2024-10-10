@@ -11,7 +11,7 @@ import nltk
 from collections import Counter
 import requests
 from bs4 import BeautifulSoup
-import openai
+from openai import OpenAI
 from typing import List, Dict, Any, Optional
 import logging
 
@@ -184,17 +184,20 @@ def generate_suggestions_for_title_meta(title: str, meta_description: str, find_
     """
 
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
+        client = OpenAI(
+            api_key=os.environ.get("OPENAI_API_KEY")
+        )
+        response = client.chat.completions.create(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": input_prompt}
             ],
+            model="gpt-3.5-turbo",
             temperature=0.7,
             max_tokens=500
         )
-        return response['choices'][0]['message']['content']
-    except openai.error.OpenAIError as e:
+        return response.choices[0].message.content
+    except Exception as e:
         logger.error(f"Error with OpenAI API: {e}")
         st.error("Error generating AI suggestions. Please check your API key and try again.")
         return None
@@ -202,13 +205,13 @@ def generate_suggestions_for_title_meta(title: str, meta_description: str, find_
 def main():
     """Main function to run the Streamlit app."""
     st.set_page_config(page_title="GSC Analyzer with GPT-4", page_icon="📊", layout="wide")
-    st.title("Google Search Console Data Analyzer with GPT-4 AI Suggestions")
+    st.title("Google Search Console Data Analyzer with GPT-3.5 Turbo AI Suggestions")
 
     # Sidebar for configuration
     st.sidebar.header("Configuration")
     openai_api_key = st.sidebar.text_input("Enter your OpenAI API Key:", type="password")
     if openai_api_key:
-        openai.api_key = openai_api_key
+        os.environ["OPENAI_API_KEY"] = openai_api_key
     else:
         st.sidebar.warning("Please enter your OpenAI API key to use AI suggestions.")
 
@@ -252,7 +255,7 @@ def main():
 
                             suggestions = generate_suggestions_for_title_meta(title, meta_description, find_gaps_terms)
                             if suggestions:
-                                st.write("AI-generated Suggestions (GPT-4):")
+                                st.write("AI-generated Suggestions (GPT-3.5 Turbo):")
                                 st.write(suggestions)
         else:
             st.error("Failed to connect to Google Search Console. Please check your credentials and try again.")
