@@ -184,16 +184,17 @@ def generate_suggestions_for_title_meta(title: str, meta_description: str, find_
     """
 
     try:
-        client = OpenAI(api_key=st.session_state.openai_api_key)
-        response = client.chat.completions.create(
-            model="gpt-4",  # Note: Changed from "gpt-4o-mini" to "gpt-4" as the former doesn't exist
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": input_prompt}
-            ]
+            ],
+            temperature=0.7,
+            max_tokens=500
         )
-        return response.choices[0].message.content
-    except Exception as e:
+        return response['choices'][0]['message']['content']
+    except openai.error.OpenAIError as e:
         logger.error(f"Error with OpenAI API: {e}")
         st.error("Error generating AI suggestions. Please check your API key and try again.")
         return None
@@ -207,7 +208,7 @@ def main():
     st.sidebar.header("Configuration")
     openai_api_key = st.sidebar.text_input("Enter your OpenAI API Key:", type="password")
     if openai_api_key:
-        st.session_state.openai_api_key = openai_api_key
+        openai.api_key = openai_api_key
     else:
         st.sidebar.warning("Please enter your OpenAI API key to use AI suggestions.")
 
@@ -249,13 +250,10 @@ def main():
                             find_gaps_terms = identify_gaps(st.session_state.df, url)
                             st.write("Keywords missing in title/meta description:", find_gaps_terms)
 
-                            if openai.api_key:
-                                suggestions = generate_suggestions_for_title_meta(title, meta_description, find_gaps_terms)
-                                if suggestions:
-                                    st.write("AI-generated Suggestions (GPT-4o-mini):")
-                                    st.write(suggestions)
-                            else:
-                                st.warning("OpenAI API key not provided. AI suggestions are unavailable.")
+                            suggestions = generate_suggestions_for_title_meta(title, meta_description, find_gaps_terms)
+                            if suggestions:
+                                st.write("AI-generated Suggestions (GPT-4):")
+                                st.write(suggestions)
         else:
             st.error("Failed to connect to Google Search Console. Please check your credentials and try again.")
     else:
