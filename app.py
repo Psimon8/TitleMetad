@@ -11,10 +11,8 @@ import nltk
 from collections import Counter
 import requests
 from bs4 import BeautifulSoup
-from openai import OpenAI
 from typing import List, Dict, Any, Optional
 import logging
-import openai migrate
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -168,12 +166,14 @@ def identify_gaps(df: pd.DataFrame, selected_url: str) -> List[str]:
     
     return token_counts_df.head(10)['token'].tolist()
 
-def generate_suggestions_for_title_meta(title: str, meta_description: str, find_gaps_terms: List[str]) -> str:
-    """Generate optimized suggestions for title and meta description using OpenAI."""
+def generate_suggestions_for_title_meta(title: str, meta_description: str, find_gaps_terms: List[str], secret_key: str) -> str:
+    """Generate optimized suggestions for title and meta description using OpenAI API with direct HTTP request."""
+    # Prompt for the system role
     system_prompt = """
     You are an expert SEO and UX copywriter. Your task is to optimize titles and meta descriptions to increase CTR in SERPs.
     """
 
+    # Prompt for the user input
     input_prompt = f"""
     Here is the existing Title: {title}
     Here are the gap terms for Title: {find_gaps_terms}
@@ -184,37 +184,51 @@ def generate_suggestions_for_title_meta(title: str, meta_description: str, find_
     Generate 3 optimized suggestions for both titles and meta descriptions.
     """
 
+    # API endpoint
+    url = "https://api.openai.com/v1/chat/completions"
+
+    # API payload
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": input_prompt}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 500
+    }
+
+    # API headers
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {secret_key}"
+    }
+
     try:
-        client = OpenAI(
-            api_key=os.environ.get("OPENAI_API_KEY")
-        )
-        response = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": input_prompt}
-            ],
-            model="gpt-4o-mini",
-            temperature=0.7,
-            max_tokens=500
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        logger.error(f"Error with OpenAI API: {e}")
-        st.error("Error generating AI suggestions. Please check your API key and try again.")
-        return None
+        # Sending the POST request to the OpenAI API
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()  # Check if the request was successful
+        response_json = response.json()
+        return response_json['choices'][0]['message']['content'].strip()
+    
+    except requests.exceptions.RequestException as e:
+        logger.error(f"HTTP error while communicating with OpenAI API: {e}")
+        return "Error generating AI suggestions. Please check your API key and try again."
+    except KeyError:
+        logger.error("Unexpected response structure from OpenAI API.")
+        return "Error generating AI suggestions. Please check your API key and try again."
 
 def main():
     """Main function to run the Streamlit app."""
-    st.set_page_config(page_title="GSC Analyzer with GPT-4", page_icon="📊", layout="wide")
-    st.title("Google Search Console Data Analyzer with GPT-3.5 Turbo AI Suggestions")
+    st.set_page_config(page_title="GSC Analyzer with GPT-4o-mini", page_icon="📊", layout="wide")
+    st.title("Google Search Console Data Analyzer with GPT-4o-mini AI Suggestions")
 
     # Sidebar for configuration
     st.sidebar.header("Configuration")
     openai_api_key = st.sidebar.text_input("Enter your OpenAI API Key:", type="password")
-    if openai_api_key:
-        os.environ["OPENAI_API_KEY"] = openai_api_key
-    else:
+    if not openai_api_key:
         st.sidebar.warning("Please enter your OpenAI API key to use AI suggestions.")
+        return
 
     credentials = authenticate_user()
 
@@ -254,9 +268,9 @@ def main():
                             find_gaps_terms = identify_gaps(st.session_state.df, url)
                             st.write("Keywords missing in title/meta description:", find_gaps_terms)
 
-                            suggestions = generate_suggestions_for_title_meta(title, meta_description, find_gaps_terms)
+                            suggestions = generate_suggestions_for_title_meta(title, meta_description, find_gaps_terms, openai_api_key)
                             if suggestions:
-                                st.write("AI-generated Suggestions (GPT-3.5 Turbo):")
+                                st.write("AI-generated Suggestions (GPT-4o-mini):")
                                 st.write(suggestions)
         else:
             st.error("Failed to connect to Google Search Console. Please check your credentials and try again.")
