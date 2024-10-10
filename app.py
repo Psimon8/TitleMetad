@@ -81,7 +81,7 @@ def authenticate_user() -> Optional[Credentials]:
                 return credentials
         except Exception as e:
             logger.error(f"Error during authentication: {e}")
-            st.error("Authentication failed. Please try again.")
+            st.error(f"Authentication failed. Error details: {e}")
     
     return credentials
 
